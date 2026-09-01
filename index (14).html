@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<title>QuoteStudio v2</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.26.9/babel.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;-webkit-tap-highlight-color:transparent}
+body{font-family:'Inter',sans-serif;background:#e8eaed;color:#1f2937;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+input,textarea,select,button{font-family:inherit;color:inherit}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#c0c4cc;border-radius:3px}
+.app{display:flex;height:100vh;overflow:hidden}
+.sidebar{width:260px;background:#1e1e2e;color:#cdd6f4;display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto;transition:transform .25s}
+.sidebar.closed{transform:translateX(-260px);position:absolute;z-index:100;height:100%}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.sb-brand{padding:18px 20px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #313244}
+.sb-brand h1{font-size:15px;font-weight:700;color:#cba6f7;letter-spacing:-.02em}
+.sb-brand span{font-size:10px;color:#6c7086;font-weight:500}
+.sb-section{padding:12px 16px 4px}
+.sb-section-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#6c7086;margin-bottom:8px}
+.sb-block{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;cursor:pointer;transition:all .15s;border:1px solid transparent;margin-bottom:2px}
+.sb-block:hover{background:#313244;border-color:#45475a}
+.sb-icon{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.sb-label{font-size:12px;font-weight:500}
+.sb-sub{font-size:10px;color:#6c7086;margin-top:1px}
+.sb-divider{height:1px;background:#313244;margin:8px 16px}
+.topbar{height:50px;background:#fff;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;padding:0 16px;flex-shrink:0;z-index:20}
+.tb-left{display:flex;align-items:center;gap:10px}
+.tb-toggle{width:34px;height:34px;border:none;background:none;font-size:18px;cursor:pointer;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#6b7280}
+.tb-toggle:hover{background:#f3f4f6}
+.tb-title{font-size:13px;font-weight:600;color:#374151}
+.tb-status{font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;background:#fef3c7;color:#92400e;border:1px solid #fcd34d}
+.tb-right{display:flex;align-items:center;gap:6px}
+.tb-btn{padding:7px 14px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid #e5e7eb;background:#fff;cursor:pointer;display:flex;align-items:center;gap:5px;color:#374151;transition:all .15s}
+.tb-btn:hover{background:#f9fafb;border-color:#d1d5db}
+.tb-btn.primary{background:#7c3aed;color:#fff;border-color:#6d28d9}
+.tb-btn.primary:hover{background:#6d28d9}
+.canvas-wrap{flex:1;overflow-y:auto;padding:24px;background:#e8eaed;display:flex;justify-content:center}
+.canvas{width:100%;max-width:900px;background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08),0 8px 30px rgba(0,0,0,.06);overflow:hidden;min-height:calc(100vh - 98px)}
+.q-block{position:relative;transition:all .15s}
+.q-block::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:transparent;border-radius:0 2px 2px 0;transition:background .15s;z-index:5}
+.q-block:hover::before{background:#7c3aed}
+.q-block .block-controls{position:absolute;left:-44px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:3px;opacity:0;transition:opacity .15s}
+.q-block:hover .block-controls{opacity:1}
+.bc-btn{width:30px;height:30px;border-radius:6px;border:1px solid #e5e7eb;background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;color:#9ca3af;box-shadow:0 1px 3px rgba(0,0,0,.08);transition:all .12s}
+.bc-btn:hover{color:#374151;border-color:#d1d5db;background:#f9fafb}
+.bc-btn.danger:hover{color:#ef4444;border-color:#fecaca;background:#fef2f2}
+.cover-block{position:relative;min-height:380px;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden}
+.cover-bg{position:absolute;inset:0;background:linear-gradient(135deg,#0f0a1e 0%,#1a1145 40%,#2d1b69 100%)}
+.cover-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.7) 0%,rgba(0,0,0,.15) 50%,rgba(0,0,0,.05) 100%)}
+.cover-content{position:relative;z-index:2;padding:48px 56px}
+.cover-title{font-size:32px;font-weight:800;color:#fff;letter-spacing:-.03em;line-height:1.15;margin-bottom:12px;border:none;background:transparent;width:100%;outline:none;resize:none;overflow:hidden}
+.cover-title::placeholder{color:rgba(255,255,255,.3)}
+.cover-meta{display:flex;gap:20px;font-size:13px;color:rgba(255,255,255,.5)}
+.cover-meta-edit{border:none;background:transparent;color:rgba(255,255,255,.7);font-size:13px;outline:none;border-bottom:1px dashed rgba(255,255,255,.2);padding-bottom:2px}
+.cover-meta-edit:focus{border-bottom-color:rgba(255,255,255,.5);color:#fff}
+.cover-meta-edit::placeholder{color:rgba(255,255,255,.3)}
+.text-block{padding:40px 56px}
+.text-heading{font-size:22px;font-weight:700;color:#111827;border:none;background:transparent;width:100%;outline:none;margin-bottom:8px;letter-spacing:-.02em}
+.text-heading::placeholder{color:#d1d5db}
+.text-body{font-size:15px;line-height:1.75;color:#4b5563;border:none;background:transparent;width:100%;outline:none;resize:none;min-height:60px}
+.text-body::placeholder{color:#d1d5db}
+.ai-float{position:absolute;right:16px;bottom:16px;padding:6px 14px;border-radius:20px;border:1px solid #ddd6fe;background:#f5f3ff;color:#7c3aed;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;opacity:0;transition:opacity .2s;box-shadow:0 2px 8px rgba(124,58,237,.12)}
+.q-block:hover .ai-float{opacity:1}
+.room-block{padding:36px 56px}
+.room-name{font-size:18px;font-weight:700;color:#111827;border:none;background:transparent;width:100%;outline:none;margin-bottom:4px}
+.room-name::placeholder{color:#d1d5db}
+.room-subtitle{font-size:12px;color:#9ca3af;margin-bottom:16px}
+.items-table{width:100%;border-collapse:collapse}
+.items-table thead th{text-align:left;padding:10px 0;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#9ca3af;border-bottom:2px solid #f3f4f6}
+.items-table thead th.r{text-align:right}
+.items-table tbody td{padding:12px 0;border-bottom:1px solid #f9fafb;vertical-align:top}
+.items-table tbody td.r{text-align:right}
+.items-table tbody tr:hover{background:#fafbff}
+.item-name-input{font-size:14px;font-weight:500;color:#1f2937;border:none;background:transparent;outline:none;width:100%}
+.item-name-input::placeholder{color:#d1d5db}
+.item-ref-input{font-size:11px;color:#9ca3af;border:none;background:transparent;outline:none;width:100%;margin-top:2px}
+.item-ref-input::placeholder{color:#e5e7eb}
+.item-num{font-size:13px;color:#374151;border:none;background:transparent;outline:none;width:100%;text-align:right;font-variant-numeric:tabular-nums}
+.item-total{font-size:14px;font-weight:600;color:#111827;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.item-vat{font-size:10px;background:#f3f4f6;border:none;border-radius:4px;padding:2px 6px;color:#6b7280}
+.item-del{opacity:0;border:none;background:none;color:#d1d5db;cursor:pointer;font-size:14px;padding:4px;transition:all .15s}
+.items-table tbody tr:hover .item-del{opacity:1}
+.item-del:hover{color:#ef4444}
+.items-footer{display:flex;align-items:center;justify-content:space-between;padding-top:14px}
+.add-item-btn{border:none;background:none;color:#7c3aed;font-size:12px;font-weight:600;cursor:pointer;padding:6px 0;display:flex;align-items:center;gap:4px}
+.add-item-btn:hover{text-decoration:underline}
+.room-subtotal{text-align:right}
+.room-subtotal .label{font-size:11px;color:#9ca3af;font-weight:500}
+.room-subtotal .value{font-size:18px;font-weight:700;color:#111827;letter-spacing:-.02em}
+.options-block{padding:36px 56px;background:#fafbfc}
+.options-title{font-size:18px;font-weight:700;color:#111827;margin-bottom:4px}
+.options-desc{font-size:13px;color:#9ca3af;margin-bottom:20px}
+.opt-card{display:flex;align-items:center;gap:14px;padding:14px 18px;border-radius:10px;border:1.5px solid #e5e7eb;background:#fff;margin-bottom:8px;cursor:pointer;transition:all .2s}
+.opt-card:hover{border-color:#c4b5fd;box-shadow:0 2px 8px rgba(124,58,237,.06)}
+.opt-card.selected{border-color:#7c3aed;background:#faf5ff;box-shadow:0 0 0 3px rgba(124,58,237,.1)}
+.opt-check{width:22px;height:22px;border-radius:6px;border:2px solid #d1d5db;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;font-size:12px;color:#fff}
+.opt-card.selected .opt-check{background:#7c3aed;border-color:#7c3aed}
+.opt-info{flex:1;min-width:0}
+.opt-price{font-size:15px;font-weight:700;color:#7c3aed;white-space:nowrap}
+.opt-card:not(.selected) .opt-price{color:#6b7280}
+.gallery-block{padding:36px 56px}
+.gallery-grid{display:grid;gap:8px}
+.gallery-img{aspect-ratio:4/3;border-radius:10px;overflow:hidden;background:#f3f4f6;position:relative}
+.gallery-img img{width:100%;height:100%;object-fit:cover}
+.gallery-img .g-remove{position:absolute;top:6px;right:6px;width:26px;height:26px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;opacity:0;transition:opacity .15s}
+.gallery-img:hover .g-remove{opacity:1}
+.gallery-add{aspect-ratio:4/3;border-radius:10px;border:2px dashed #d1d5db;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;color:#9ca3af;transition:all .15s;background:transparent;font-family:inherit}
+.gallery-add:hover{border-color:#7c3aed;color:#7c3aed;background:#faf5ff}
+.video-block{padding:36px 56px}
+.video-player{aspect-ratio:16/9;border-radius:12px;background:#0f172a;display:flex;align-items:center;justify-content:center}
+.video-play{width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.15);backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;font-size:24px;color:#fff;border:2px solid rgba(255,255,255,.25);cursor:pointer;transition:all .2s}
+.video-play:hover{background:rgba(255,255,255,.25);transform:scale(1.05)}
+.sig-block{padding:40px 56px;background:#fafbfc;border-top:1px solid #f3f4f6}
+.sig-title{font-size:18px;font-weight:700;color:#111827;margin-bottom:4px}
+.sig-desc{font-size:13px;color:#9ca3af;margin-bottom:20px}
+.sig-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+.sig-field label{font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;display:block}
+.sig-field input{width:100%;padding:10px 14px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;background:#fff;outline:none;transition:border-color .15s}
+.sig-field input:focus{border-color:#7c3aed;box-shadow:0 0 0 3px rgba(124,58,237,.08)}
+.sig-field input::placeholder{color:#d1d5db}
+.sig-pad{height:120px;border:1.5px solid #e5e7eb;border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;color:#d1d5db;font-size:13px;cursor:crosshair}
+.totals-bar{background:#fff;border-top:1px solid #e5e7eb;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;z-index:20}
+.totals-left{font-size:11px;color:#6b7280;line-height:1.8}
+.totals-row{display:flex;gap:16px;justify-content:space-between;min-width:200px}
+.t-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#6b7280}
+.t-amount{font-size:24px;font-weight:800;color:#111827;letter-spacing:-.03em}
+.add-zone{padding:32px;display:flex;align-items:center;justify-content:center}
+.add-zone-btn{padding:12px 24px;border:2px dashed #d1d5db;border-radius:12px;background:transparent;color:#9ca3af;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px;font-family:inherit}
+.add-zone-btn:hover{border-color:#7c3aed;color:#7c3aed;background:#faf5ff}
+@media(max-width:768px){
+  .sidebar{position:fixed;z-index:100;height:100%;box-shadow:4px 0 20px rgba(0,0,0,.3)}
+  .sidebar.closed{transform:translateX(-260px)}
+  .cover-content,.text-block,.room-block,.options-block,.gallery-block,.video-block,.sig-block{padding-left:20px !important;padding-right:20px !important}
+  .cover-title{font-size:24px !important}
+  .q-block .block-controls{display:none !important}
+  .tb-text{display:none}
+  .sig-fields{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const{useState,useRef,useCallback}=React;
+const uid=()=>crypto.randomUUID?crypto.randomUUID():Math.random().toString(36).slice(2,10);
+const fmt=n=>new Intl.NumberFormat('nl-BE',{style:'currency',currency:'EUR'}).format(n);
+function createBlock(t){const d={cover:{title:'',clientName:'',date:new Date().toISOString().slice(0,10),bannerUrl:''},text:{heading:'',content:''},room:{roomName:'',items:[]},options:{heading:'Extra opties',items:[]},gallery:{columns:3,images:[]},video:{url:''},signature:{signerName:'',signerRole:''}};return{id:uid(),type:t,data:d[t]}}
+const li=()=>({id:uid(),name:'',ref:'',qty:1,price:0,vatRate:21});
+const oi=()=>({id:uid(),name:'',ref:'',qty:1,price:0,vatRate:21,selected:false});
+function calcTotals(bl){let s=0,o=0,n=0;bl.forEach(b=>{if(b.type==='room')b.data.items.forEach(i=>{s+=i.qty*i.price});if(b.type==='options')b.data.items.forEach(i=>{if(i.selected){o+=i.qty*i.price;n++}})});const base=s+o;return{sub:s,opt:o,optN:n,vat:base*.21,total:base*1.21}}
+
+const DEMO=[
+  {...createBlock('cover'),data:{title:'Voorstel AV-installatie\nvergaderzalen',clientName:'TechCorp BV',date:'2026-08-31',bannerUrl:''}},
+  {...createBlock('text'),data:{heading:'Onze aanpak',content:'Op basis van onze analyse stellen wij een volledig geïntegreerde audiovisuele oplossing voor die naadloos aansluit bij uw bestaande infrastructuur. Het systeem is modulair uitbreidbaar en toekomstbestendig.'}},
+  {...createBlock('room'),data:{roomName:'Vergaderzaal A',items:[{id:uid(),name:'Samsung QM85R 85" display',ref:'LH85QMREBGCXEN',qty:1,price:3450,vatRate:21},{id:uid(),name:'Shure MXA920 plafondmicrofoon',ref:'MXA920-S',qty:2,price:1890,vatRate:21},{id:uid(),name:'Crestron DMPS3-4K-350-C',ref:'DMPS3-4K-350-C',qty:1,price:4250,vatRate:21},{id:uid(),name:'Installatie en configuratie',ref:'',qty:1,price:1200,vatRate:21}]}},
+  {...createBlock('room'),data:{roomName:'Boardroom',items:[{id:uid(),name:'LG LAEC018 LED wall 2×1m',ref:'LAEC018-S2',qty:1,price:18500,vatRate:21},{id:uid(),name:'Sennheiser TeamConnect Ceiling 2',ref:'TCC2',qty:1,price:3200,vatRate:21}]}},
+  {...createBlock('options'),data:{heading:'Extra opties',items:[{id:uid(),name:'Barco ClickShare CX-50',ref:'R9861522EU',qty:1,price:1650,vatRate:21,selected:true},{id:uid(),name:'3 jaar onderhoudscontract',ref:'SVC-MAINT-36M',qty:1,price:480,vatRate:21,selected:false},{id:uid(),name:'Dante audio-netwerk uitbreiding',ref:'',qty:1,price:2350,vatRate:21,selected:false}]}},
+  createBlock('signature'),
+];
+
+const PALETTE=[
+  {type:'cover',icon:'🎨',label:'Cover',sub:'Titel, logo & banner',bg:'#fef3c7'},
+  {type:'text',icon:'📝',label:'Tekst / AI',sub:'Rijke tekst met AI',bg:'#ede9fe'},
+  {type:'room',icon:'🏠',label:'Zaal',sub:'Artikelen & prijzen',bg:'#d1fae5'},
+  {type:'options',icon:'☑️',label:'Opties',sub:'Aankruisbare extras',bg:'#ede9fe'},
+  {type:'gallery',icon:'🖼',label:'Galerij',sub:'Fotogrid',bg:'#fce7f3'},
+  {type:'video',icon:'🎬',label:'Video',sub:'YouTube / Vimeo',bg:'#fef3c7'},
+  {type:'signature',icon:'✍️',label:'Handtekening',sub:'E-sign klant',bg:'#d1fae5'},
+];
+
+function App(){
+  const[blocks,setBlocks]=useState(DEMO);
+  const[sideOpen,setSideOpen]=useState(window.innerWidth>768);
+  const[showMenu,setShowMenu]=useState(false);
+  const dragIdx=useRef(null);
+  const[dragOver,setDragOver]=useState(null);
+  const upd=useCallback((id,data)=>setBlocks(b=>b.map(x=>x.id===id?{...x,data}:x)),[]);
+  const add=(type)=>{setBlocks(b=>[...b,createBlock(type)]);setShowMenu(false)};
+  const del=id=>setBlocks(b=>b.filter(x=>x.id!==id));
+  const move=(f,t)=>setBlocks(b=>{const n=[...b];const[i]=n.splice(f,1);n.splice(t,0,i);return n});
+  const totals=calcTotals(blocks);
+
+  return <div className="app">
+    <aside className={`sidebar${sideOpen?'':' closed'}`}>
+      <div className="sb-brand"><h1>◆ QuoteStudio</h1><span>v2</span>
+        <button onClick={()=>setSideOpen(false)} style={{marginLeft:'auto',background:'none',border:'none',color:'#6c7086',cursor:'pointer',fontSize:16}}>✕</button>
+      </div>
+      <div className="sb-section"><div className="sb-section-title">Bouwblokken</div>
+        {PALETTE.map(p=><div key={p.type} className="sb-block" onClick={()=>add(p.type)}>
+          <div className="sb-icon" style={{background:p.bg}}>{p.icon}</div>
+          <div><div className="sb-label">{p.label}</div><div className="sb-sub">{p.sub}</div></div>
+        </div>)}
+      </div>
+      <div className="sb-divider"/>
+      <div className="sb-section"><div className="sb-section-title">Structuur</div>
+        {blocks.map(b=><div key={b.id} className="sb-block" style={{padding:'6px 12px'}} onClick={()=>document.getElementById('b-'+b.id)?.scrollIntoView({behavior:'smooth',block:'center'})}>
+          <span style={{fontSize:14}}>{PALETTE.find(p=>p.type===b.type)?.icon}</span>
+          <div><div className="sb-label" style={{fontSize:11}}>{b.type==='room'?(b.data.roomName||'Zaal'):b.type==='text'?(b.data.heading||'Tekst'):b.type==='cover'?'Cover':PALETTE.find(p=>p.type===b.type)?.label}</div></div>
+        </div>)}
+      </div>
+    </aside>
+
+    <div className="main">
+      <div className="topbar">
+        <div className="tb-left">
+          {!sideOpen&&<button className="tb-toggle" onClick={()=>setSideOpen(true)}>☰</button>}
+          <span className="tb-title">Offerte bewerken</span>
+          <span className="tb-status">Concept</span>
+        </div>
+        <div className="tb-right">
+          <button className="tb-btn"><span>👁</span><span className="tb-text"> Preview</span></button>
+          <button className="tb-btn"><span>📄</span><span className="tb-text"> PDF</span></button>
+          <button className="tb-btn"><span>🔗</span><span className="tb-text"> Deel</span></button>
+          <button className="tb-btn primary"><span>💾</span><span className="tb-text"> Opslaan</span></button>
+        </div>
+      </div>
+
+      <div className="canvas-wrap">
+        <div className="canvas">
+          {blocks.map((block,idx)=><div key={block.id} id={'b-'+block.id}
+            draggable onDragStart={()=>{dragIdx.current=idx}} onDragOver={e=>{e.preventDefault();setDragOver(idx)}} onDrop={()=>{if(dragIdx.current!==null&&dragIdx.current!==idx)move(dragIdx.current,idx);dragIdx.current=null;setDragOver(null)}} onDragEnd={()=>setDragOver(null)}
+            className="q-block" style={dragOver===idx?{boxShadow:'inset 0 -3px 0 #7c3aed'}:{}}>
+            <div className="block-controls">
+              {idx>0&&<button className="bc-btn" onClick={()=>move(idx,idx-1)}>↑</button>}
+              {idx<blocks.length-1&&<button className="bc-btn" onClick={()=>move(idx,idx+1)}>↓</button>}
+              <button className="bc-btn" style={{cursor:'grab'}}>⠿</button>
+              <button className="bc-btn danger" onClick={()=>del(block.id)}>🗑</button>
+            </div>
+            <RenderBlock b={block} upd={d=>upd(block.id,d)}/>
+          </div>)}
+          <div className="add-zone"><button className="add-zone-btn" onClick={()=>setShowMenu(true)}>+ Blok toevoegen</button></div>
+        </div>
+      </div>
+
+      <div className="totals-bar">
+        <div className="totals-left">
+          <div className="totals-row"><span>Subtotaal</span><span>{fmt(totals.sub)}</span></div>
+          {totals.optN>0&&<div className="totals-row"><span>Opties ({totals.optN})</span><span>{fmt(totals.opt)}</span></div>}
+          <div className="totals-row"><span>BTW 21%</span><span>{fmt(totals.vat)}</span></div>
+        </div>
+        <div style={{textAlign:'right'}}><div className="t-label">Totaal incl. BTW</div><div className="t-amount">{fmt(totals.total)}</div></div>
+      </div>
+    </div>
+
+    {showMenu&&<div onClick={()=>setShowMenu(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:16,padding:24,width:'100%',maxWidth:420,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
+        <h3 style={{fontSize:16,fontWeight:700,marginBottom:16}}>Blok toevoegen</h3>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+          {PALETTE.map(p=><button key={p.type} onClick={()=>add(p.type)} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',border:'1.5px solid #e5e7eb',borderRadius:10,cursor:'pointer',background:'#fff',textAlign:'left',fontFamily:'inherit',transition:'all .15s'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='#7c3aed';e.currentTarget.style.background='#faf5ff'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='#e5e7eb';e.currentTarget.style.background='#fff'}}>
+            <div style={{width:36,height:36,borderRadius:8,background:p.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16}}>{p.icon}</div>
+            <div><div style={{fontSize:13,fontWeight:600}}>{p.label}</div><div style={{fontSize:10,color:'#9ca3af'}}>{p.sub}</div></div>
+          </button>)}
+        </div>
+        <button onClick={()=>setShowMenu(false)} style={{width:'100%',marginTop:16,padding:10,fontSize:13,fontWeight:600,color:'#6b7280',border:'1px solid #e5e7eb',borderRadius:10,background:'#fff',cursor:'pointer',fontFamily:'inherit'}}>Annuleren</button>
+      </div>
+    </div>}
+  </div>;
+}
+
+function RenderBlock({b,upd}){
+  const set=(k,v)=>upd({...b.data,[k]:v});
+  const setItem=(id,p)=>upd({...b.data,items:b.data.items.map(i=>i.id===id?{...i,...p}:i)});
+  switch(b.type){
+    case'cover':return <div className="cover-block"><div className="cover-bg" style={b.data.bannerUrl?{backgroundImage:`url(${b.data.bannerUrl})`,backgroundSize:'cover',backgroundPosition:'center'}:{}}/><div className="cover-content">
+      <textarea className="cover-title" value={b.data.title} onChange={e=>set('title',e.target.value)} placeholder="Offerte-titel…" rows={2}/>
+      <div className="cover-meta"><input className="cover-meta-edit" value={b.data.clientName} onChange={e=>set('clientName',e.target.value)} placeholder="Klantnaam"/><input className="cover-meta-edit" type="date" value={b.data.date} onChange={e=>set('date',e.target.value)}/></div>
+    </div></div>;
+    case'text':return <div className="text-block"><input className="text-heading" value={b.data.heading} onChange={e=>set('heading',e.target.value)} placeholder="Koptekst"/><textarea className="text-body" value={b.data.content} onChange={e=>set('content',e.target.value)} placeholder="Begin te typen…" rows={3}/><button className="ai-float">✦ AI genereren</button></div>;
+    case'room':{const sub=b.data.items.reduce((s,i)=>s+i.qty*i.price,0);return <div className="room-block">
+      <input className="room-name" value={b.data.roomName} onChange={e=>set('roomName',e.target.value)} placeholder="Zaalnaam"/>
+      <div className="room-subtitle">{b.data.items.length} artikel{b.data.items.length!==1?'en':''}</div>
+      <table className="items-table"><thead><tr><th style={{width:'45%'}}>Artikel</th><th className="r" style={{width:'10%'}}>Aantal</th><th className="r" style={{width:'16%'}}>Eenheidsprijs</th><th style={{width:'8%',textAlign:'center'}}>BTW</th><th className="r" style={{width:'16%'}}>Totaal</th><th style={{width:'5%'}}/></tr></thead>
+      <tbody>{b.data.items.map(item=><tr key={item.id}>
+        <td><input className="item-name-input" value={item.name} onChange={e=>setItem(item.id,{name:e.target.value})} placeholder="Artikelnaam"/><input className="item-ref-input" value={item.ref||''} onChange={e=>setItem(item.id,{ref:e.target.value})} placeholder="Referentie"/></td>
+        <td className="r"><input className="item-num" type="number" min={0} value={item.qty} onChange={e=>setItem(item.id,{qty:+e.target.value||0})}/></td>
+        <td className="r"><input className="item-num" type="number" min={0} step={.01} value={item.price} onChange={e=>setItem(item.id,{price:+e.target.value||0})}/></td>
+        <td style={{textAlign:'center'}}><select className="item-vat" value={item.vatRate} onChange={e=>setItem(item.id,{vatRate:+e.target.value})}><option value={21}>21%</option><option value={6}>6%</option></select></td>
+        <td className="item-total">{fmt(item.qty*item.price)}</td>
+        <td><button className="item-del" onClick={()=>upd({...b.data,items:b.data.items.filter(i=>i.id!==item.id)})}>✕</button></td>
+      </tr>)}</tbody></table>
+      <div className="items-footer"><button className="add-item-btn" onClick={()=>upd({...b.data,items:[...b.data.items,li()]})}>+ Artikel toevoegen</button><div className="room-subtotal"><div className="label">Subtotaal</div><div className="value">{fmt(sub)}</div></div></div>
+    </div>;}
+    case'options':return <div className="options-block"><div className="options-title">{b.data.heading||'Extra opties'}</div><div className="options-desc">Selecteer de opties die u wenst toe te voegen.</div>
+      {b.data.items.map(item=><div key={item.id} className={`opt-card${item.selected?' selected':''}`} onClick={()=>setItem(item.id,{selected:!item.selected})}>
+        <div className="opt-check">{item.selected&&'✓'}</div>
+        <div className="opt-info" onClick={e=>e.stopPropagation()}>
+          <input value={item.name} onChange={e=>setItem(item.id,{name:e.target.value})} placeholder="Optienaam" style={{border:'none',background:'transparent',fontWeight:600,fontSize:14,outline:'none',width:'100%',fontFamily:'inherit'}}/>
+          <input value={item.ref||''} onChange={e=>setItem(item.id,{ref:e.target.value})} placeholder="Ref" style={{border:'none',background:'transparent',fontSize:11,color:'#9ca3af',outline:'none',width:'100%',fontFamily:'inherit',marginTop:2}}/>
+        </div>
+        <div className="opt-price" onClick={e=>e.stopPropagation()}>+ {fmt(item.price)}</div>
+      </div>)}
+      <button className="add-item-btn" style={{marginTop:8}} onClick={()=>upd({...b.data,items:[...b.data.items,oi()]})}>+ Optie toevoegen</button>
+    </div>;
+    case'gallery':return <div className="gallery-block"><div className="gallery-grid" style={{gridTemplateColumns:`repeat(${b.data.columns||3},1fr)`}}>
+      {b.data.images.map(img=><div key={img.id} className="gallery-img"><img src={img.url} alt=""/><button className="g-remove" onClick={()=>upd({...b.data,images:b.data.images.filter(i=>i.id!==img.id)})}>✕</button></div>)}
+      <button className="gallery-add" onClick={()=>{const u=prompt('Afbeeldings-URL:');if(u)upd({...b.data,images:[...b.data.images,{id:uid(),url:u,caption:''}]})}}>
+        <span style={{fontSize:20}}>+</span><span style={{fontSize:11}}>Foto toevoegen</span>
+      </button>
+    </div></div>;
+    case'video':return <div className="video-block"><div className="video-player"><button className="video-play">▶</button></div>
+      <input value={b.data.url||''} onChange={e=>set('url',e.target.value)} placeholder="YouTube of Vimeo URL…" style={{width:'100%',marginTop:12,padding:'10px 14px',border:'1.5px solid #e5e7eb',borderRadius:8,fontSize:13,outline:'none',fontFamily:'inherit'}}/>
+    </div>;
+    case'signature':return <div className="sig-block"><div className="sig-title">Handtekening</div><div className="sig-desc">Teken hieronder en bevestig uw akkoord.</div>
+      <div className="sig-fields"><div className="sig-field"><label>Naam</label><input value={b.data.signerName||''} onChange={e=>set('signerName',e.target.value)} placeholder="Uw volledige naam"/></div><div className="sig-field"><label>Functie</label><input value={b.data.signerRole||''} onChange={e=>set('signerRole',e.target.value)} placeholder="CEO, CTO, …"/></div></div>
+      <div className="sig-pad">Teken hier uw handtekening</div>
+    </div>;
+    default:return null;
+  }
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
