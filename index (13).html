@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<title>QuoteStudio v2 — Block Editor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.26.9/babel.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-tap-highlight-color:transparent}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:14px;color:#212529;background:#f0f2f5;min-height:100vh;-webkit-font-smoothing:antialiased}
+input,textarea,select,button{font-family:inherit}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#d0d5db;border-radius:3px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef, useCallback, useEffect } = React;
+
+/* ═══════════════════════════════════════════════════════════════
+   DATA MODEL
+   ═══════════════════════════════════════════════════════════════ */
+
+const uid = () => crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2,10);
+const today = () => new Date().toISOString().slice(0,10);
+const fmt = (n) => new Intl.NumberFormat('nl-BE',{style:'currency',currency:'EUR'}).format(n);
+
+const BLOCK_META = {
+  cover:     { icon:'🎨', label:'Cover',        color:'bg-amber-100 text-amber-800',   colorCSS:'background:#fef3c7;color:#92400e' },
+  text:      { icon:'📝', label:'Tekst / AI',    color:'bg-blue-50 text-blue-700',      colorCSS:'background:#eff6ff;color:#1d4ed8' },
+  room:      { icon:'🏠', label:'Zaal',          color:'bg-emerald-50 text-emerald-700', colorCSS:'background:#e8f5ee;color:#0d6832' },
+  options:   { icon:'☑️', label:'Opties',        color:'bg-purple-50 text-purple-700',   colorCSS:'background:#f3f0ff;color:#6f42c1' },
+  gallery:   { icon:'🖼', label:'Galerij',       color:'bg-pink-50 text-pink-700',       colorCSS:'background:#fce7f3;color:#be185d' },
+  video:     { icon:'🎬', label:'Video',         color:'bg-amber-50 text-amber-700',     colorCSS:'background:#fef3c7;color:#b45309' },
+  signature: { icon:'✍️', label:'Handtekening',  color:'bg-green-50 text-green-700',     colorCSS:'background:#f0fdf4;color:#166534' },
+};
+
+const BLOCK_TYPES = ['cover','text','room','options','gallery','video','signature'];
+
+function createBlock(type) {
+  const defaults = {
+    cover:     { title:'', clientName:'', projectName:'', date:today(), validUntil:'', logoUrl:'', bannerUrl:'' },
+    text:      { heading:'', content:'', aiGenerated:false },
+    room:      { roomName:'', items:[], photo:'' },
+    options:   { heading:'Extra opties', items:[] },
+    gallery:   { columns:3, images:[] },
+    video:     { url:'', caption:'' },
+    signature: { signerName:'', signerRole:'', signatureDataUrl:'', signedAt:'', accepted:false },
+  };
+  return { id:uid(), type, collapsed:false, data:defaults[type] };
+}
+
+function createLineItem() { return { id:uid(), name:'', ref:'', qty:1, price:0, vatRate:21 }; }
+function createOptItem()  { return { id:uid(), name:'', ref:'', qty:1, price:0, vatRate:21, selected:false }; }
+
+function calcTotals(blocks) {
+  let subtotal=0, optTotal=0, optCount=0;
+  for (const b of blocks) {
+    if (b.type==='room') for (const i of b.data.items) subtotal += i.qty * i.price;
+    if (b.type==='options') for (const i of b.data.items) if (i.selected) { optTotal += i.qty*i.price; optCount++; }
+  }
+  const base = subtotal+optTotal;
+  const vat = base*0.21;
+  return { subtotal, optTotal, optCount, vat, total:base+vat };
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DEMO DATA
+   ═══════════════════════════════════════════════════════════════ */
+
+const DEMO_BLOCKS = [
+  { ...createBlock('cover'), data:{ title:'Voorstel AV-installatie vergaderzalen', clientName:'TechCorp BV', projectName:'AV vergaderzalen', date:'2026-08-31', validUntil:'2026-10-31', logoUrl:'', bannerUrl:'' }},
+  { ...createBlock('text'), data:{ heading:'Onze aanpak', content:'Op basis van onze analyse stellen wij een volledig geïntegreerde audiovisuele oplossing voor die naadloos aansluit bij uw bestaande infrastructuur. Het systeem is modulair uitbreidbaar en toekomstbestendig.', aiGenerated:false }},
+  { ...createBlock('room'), data:{ roomName:'Vergaderzaal A', photo:'', items:[
+    { id:uid(), name:'Samsung QM85R 85" display', ref:'LH85QMREBGCXEN', qty:1, price:3450, vatRate:21 },
+    { id:uid(), name:'Shure MXA920 plafondmicrofoon', ref:'MXA920-S', qty:2, price:1890, vatRate:21 },
+    { id:uid(), name:'Crestron DMPS3-4K-350-C controller', ref:'DMPS3-4K-350-C', qty:1, price:4250, vatRate:21 },
+    { id:uid(), name:'Installatie en configuratie', ref:'', qty:1, price:1200, vatRate:21 },
+  ]}},
+  { ...createBlock('room'), data:{ roomName:'Boardroom', photo:'', items:[
+    { id:uid(), name:'LG LAEC018 LED wall 2×1m', ref:'LAEC018-S2', qty:1, price:18500, vatRate:21 },
+    { id:uid(), name:'Sennheiser TeamConnect Ceiling 2', ref:'TCC2', qty:1, price:3200, vatRate:21 },
+  ]}},
+  { ...createBlock('options'), data:{ heading:'Extra opties', items:[
+    { id:uid(), name:'Barco ClickShare CX-50', ref:'R9861522EU', qty:1, price:1650, vatRate:21, selected:true },
+    { id:uid(), name:'3 jaar onderhoudscontract', ref:'SVC-MAINT-36M', qty:1, price:480, vatRate:21, selected:false },
+    { id:uid(), name:'Dante audio-netwerk uitbreiding', ref:'', qty:1, price:2350, vatRate:21, selected:false },
+  ]}},
+  { ...createBlock('gallery'), data:{ columns:3, images:[] }},
+  createBlock('signature'),
+];
+
+/* ═══════════════════════════════════════════════════════════════
+   STYLES (inline objects)
+   ═══════════════════════════════════════════════════════════════ */
+
+const S = {
+  inp: { width:'100%', padding:'6px 10px', border:'1px solid #dee2e6', borderRadius:6, fontSize:12, background:'#fff', color:'#212529', outline:'none', fontFamily:'inherit' },
+  inpFocus: { borderColor:'#2563eb', boxShadow:'0 0 0 3px rgba(37,99,235,.1)' },
+  fieldLabel: { fontSize:10, fontWeight:600, color:'#6c757d', textTransform:'uppercase', letterSpacing:'.5px', display:'flex', flexDirection:'column', gap:3 },
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   BLOCK EDITORS
+   ═══════════════════════════════════════════════════════════════ */
+
+function Field({label,children}) {
+  return <label style={S.fieldLabel}>{label}{children}</label>;
+}
+
+function Input({value,onChange,placeholder,type='text',style={}}) {
+  return <input type={type} value={value||''} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={{...S.inp,...style}} onFocus={e=>Object.assign(e.target.style,S.inpFocus)} onBlur={e=>{e.target.style.borderColor='#dee2e6';e.target.style.boxShadow='none'}} />;
+}
+
+// ── COVER ───────────────────────────────────────────
+
+function CoverEditor({data,onChange}) {
+  const set = (k,v) => onChange({...data,[k]:v});
+  return <div>
+    <div style={{background:'linear-gradient(135deg,#1e293b,#0f172a)',borderRadius:8,padding:'24px 20px',color:'#fff',marginBottom:12}}>
+      <div style={{width:60,height:20,background:'rgba(255,255,255,.15)',borderRadius:4,marginBottom:12}}/>
+      <h2 style={{fontSize:18,fontWeight:700,margin:0}}>{data.title||data.projectName||'Offerte'}</h2>
+      <p style={{fontSize:11,opacity:.5,marginTop:4}}>{data.clientName}{data.date&&' · '+data.date}</p>
+    </div>
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+      <Field label="Klantnaam"><Input value={data.clientName} onChange={v=>set('clientName',v)} placeholder="Acme BV"/></Field>
+      <Field label="Projectnaam"><Input value={data.projectName} onChange={v=>set('projectName',v)} placeholder="AV vergaderzalen"/></Field>
+      <Field label="Offerte-titel"><Input value={data.title} onChange={v=>set('title',v)} placeholder="Voorstel …"/></Field>
+      <Field label="Datum"><Input type="date" value={data.date} onChange={v=>set('date',v)}/></Field>
+      <Field label="Geldig tot"><Input type="date" value={data.validUntil} onChange={v=>set('validUntil',v)}/></Field>
+      <Field label="Coverfoto URL"><Input value={data.bannerUrl} onChange={v=>set('bannerUrl',v)} placeholder="https://…"/></Field>
+    </div>
+  </div>;
+}
+
+// ── TEXT / AI ────────────────────────────────────────
+
+function TextEditor({data,onChange}) {
+  const [loading,setLoading] = useState(false);
+  return <div style={{display:'flex',flexDirection:'column',gap:8}}>
+    <input value={data.heading||''} onChange={e=>onChange({...data,heading:e.target.value})} placeholder="Koptekst, bv. Onze aanpak" style={{width:'100%',border:'none',borderBottom:'2px solid #eef0f3',fontSize:15,fontWeight:600,padding:'4px 0',outline:'none',background:'transparent',fontFamily:'inherit'}} />
+    <textarea value={data.content||''} onChange={e=>onChange({...data,content:e.target.value})} placeholder="Beschrijf het project…" rows={4} style={{...S.inp,minHeight:80,resize:'vertical',lineHeight:1.6}} />
+    <button onClick={()=>{setLoading(true);setTimeout(()=>setLoading(false),1500)}} disabled={loading} style={{alignSelf:'flex-start',display:'flex',alignItems:'center',gap:5,padding:'5px 12px',borderRadius:6,border:'1px solid #d4c5f9',background:'#f3f0ff',color:'#6f42c1',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',opacity:loading?.5:1}}>
+      {loading ? '⏳' : '✦'} AI-tekst genereren
+    </button>
+  </div>;
+}
+
+// ── ROOM / LINE ITEMS ───────────────────────────────
+
+function RoomEditor({data,onChange}) {
+  const setItem = (id,patch) => onChange({...data,items:data.items.map(i=>i.id===id?{...i,...patch}:i)});
+  const removeItem = (id) => onChange({...data,items:data.items.filter(i=>i.id!==id)});
+  const addItem = () => onChange({...data,items:[...data.items,createLineItem()]});
+  const subtotal = data.items.reduce((s,i)=>s+i.qty*i.price,0);
+
+  return <div>
+    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+      <div style={{width:32,height:32,background:'#e8f5ee',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16}}>🏢</div>
+      <input value={data.roomName||''} onChange={e=>onChange({...data,roomName:e.target.value})} placeholder="Zaalnaam" style={{flex:1,fontSize:15,fontWeight:600,border:'none',borderBottom:'2px solid transparent',padding:'4px 0',outline:'none',background:'transparent',fontFamily:'inherit'}} onFocus={e=>e.target.style.borderBottomColor='#2563eb'} onBlur={e=>e.target.style.borderBottomColor='transparent'} />
+    </div>
+    <div style={{overflowX:'auto',borderRadius:8,border:'1px solid #dee2e6'}}>
+      <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+        <thead>
+          <tr style={{background:'#f8f9fa'}}>
+            {['Artikel','Aantal','Eenheid','BTW','Totaal',''].map((h,i)=>
+              <th key={i} style={{textAlign:i>0&&i<5?'right':'left',padding:'6px 8px',fontSize:10,fontWeight:700,color:'#6c757d',textTransform:'uppercase',letterSpacing:'.4px',borderBottom:'2px solid #eef0f3',width:i===1?55:i===2?80:i===3?55:i===4?80:i===5?30:'auto',textAlign:i===3?'center':i>=1?'right':'left'}}>{h}</th>
+            )}
+          </tr>
+        </thead>
+        <tbody>
+          {data.items.map(item => <tr key={item.id} style={{borderTop:'1px solid #f5f6f7'}} onMouseEnter={e=>e.currentTarget.style.background='#f8faff'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+            <td style={{padding:'6px 8px'}}>
+              <input value={item.name} onChange={e=>setItem(item.id,{name:e.target.value})} placeholder="Artikelnaam" style={{width:'100%',fontSize:12,fontWeight:500,border:'none',background:'transparent',outline:'none',fontFamily:'inherit'}} />
+              <input value={item.ref||''} onChange={e=>setItem(item.id,{ref:e.target.value})} placeholder="Ref" style={{width:'100%',fontSize:10,color:'#adb5bd',border:'none',background:'transparent',outline:'none',marginTop:2,fontFamily:'inherit'}} />
+            </td>
+            <td style={{padding:'6px 8px'}}><input type="number" min={0} value={item.qty} onChange={e=>setItem(item.id,{qty:+e.target.value||0})} style={{width:'100%',fontSize:12,textAlign:'right',border:'none',background:'transparent',outline:'none',fontFamily:'inherit'}} /></td>
+            <td style={{padding:'6px 8px'}}><input type="number" min={0} step={0.01} value={item.price} onChange={e=>setItem(item.id,{price:+e.target.value||0})} style={{width:'100%',fontSize:12,textAlign:'right',border:'none',background:'transparent',outline:'none',fontFamily:'inherit'}} /></td>
+            <td style={{padding:'6px 8px',textAlign:'center'}}><select value={item.vatRate} onChange={e=>setItem(item.id,{vatRate:+e.target.value})} style={{fontSize:10,background:'#f0f2f5',border:'none',borderRadius:4,padding:'2px 4px',fontFamily:'inherit'}}>
+              <option value={21}>21%</option><option value={6}>6%</option>
+            </select></td>
+            <td style={{padding:'6px 8px',textAlign:'right',fontWeight:600,fontSize:12}}>{fmt(item.qty*item.price)}</td>
+            <td style={{padding:'4px',textAlign:'center'}}><button onClick={()=>removeItem(item.id)} style={{background:'none',border:'none',color:'#ccc',cursor:'pointer',fontSize:12,fontFamily:'inherit'}} onMouseEnter={e=>e.target.style.color='#dc3545'} onMouseLeave={e=>e.target.style.color='#ccc'}>✕</button></td>
+          </tr>)}
+        </tbody>
+      </table>
+    </div>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:8,paddingTop:8,borderTop:'2px solid #eef0f3'}}>
+      <button onClick={addItem} style={{background:'none',border:'none',color:'#2563eb',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>+ Artikel toevoegen</button>
+      <div style={{fontSize:13,fontWeight:700}}><span style={{color:'#6c757d',fontSize:11,fontWeight:500,marginRight:4}}>Subtotaal</span>{fmt(subtotal)}</div>
+    </div>
+  </div>;
+}
+
+// ── OPTIONS ─────────────────────────────────────────
+
+function OptionsEditor({data,onChange}) {
+  const toggle = (id) => onChange({...data,items:data.items.map(i=>i.id===id?{...i,selected:!i.selected}:i)});
+  const setItem = (id,patch) => onChange({...data,items:data.items.map(i=>i.id===id?{...i,...patch}:i)});
+  const removeItem = (id) => onChange({...data,items:data.items.filter(i=>i.id!==id)});
+  const addItem = () => onChange({...data,items:[...data.items,createOptItem()]});
+
+  return <div style={{display:'flex',flexDirection:'column',gap:6}}>
+    {data.items.map(item => <div key={item.id} onClick={()=>toggle(item.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:8,border:item.selected?'1px solid #a3d9b8':'1px solid #dee2e6',background:item.selected?'#f0fdf4':'#fff',cursor:'pointer',transition:'all .15s'}}>
+      <div style={{width:20,height:20,borderRadius:5,border:item.selected?'2px solid #198754':'2px solid #dee2e6',background:item.selected?'#198754':'transparent',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:10,fontWeight:700,flexShrink:0}}>
+        {item.selected&&'✓'}
+      </div>
+      <div style={{flex:1,minWidth:0}} onClick={e=>e.stopPropagation()}>
+        <input value={item.name} onChange={e=>setItem(item.id,{name:e.target.value})} placeholder="Optienaam" style={{width:'100%',fontSize:13,fontWeight:500,border:'none',background:'transparent',outline:'none',fontFamily:'inherit'}} />
+        <input value={item.ref||''} onChange={e=>setItem(item.id,{ref:e.target.value})} placeholder="Ref" style={{width:'100%',fontSize:10,color:'#adb5bd',border:'none',background:'transparent',outline:'none',fontFamily:'inherit'}} />
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:8}} onClick={e=>e.stopPropagation()}>
+        <input type="number" min={0} step={0.01} value={item.price} onChange={e=>setItem(item.id,{price:+e.target.value||0})} style={{width:80,fontSize:12,textAlign:'right',border:'none',background:'transparent',outline:'none',fontFamily:'inherit'}} />
+        <button onClick={()=>removeItem(item.id)} style={{background:'none',border:'none',color:'#ccc',cursor:'pointer',fontSize:12}} onMouseEnter={e=>e.target.style.color='#dc3545'} onMouseLeave={e=>e.target.style.color='#ccc'}>✕</button>
+      </div>
+    </div>)}
+    <button onClick={addItem} style={{alignSelf:'flex-start',background:'none',border:'none',color:'#2563eb',fontSize:12,fontWeight:600,cursor:'pointer',marginTop:4,fontFamily:'inherit'}}>+ Optie toevoegen</button>
+  </div>;
+}
+
+// ── GALLERY ─────────────────────────────────────────
+
+function GalleryEditor({data,onChange}) {
+  const addImage = () => {
+    const url = prompt('Plak de afbeeldings-URL:');
+    if (url) onChange({...data,images:[...data.images,{id:uid(),url,caption:''}]});
+  };
+  const removeImage = (id) => onChange({...data,images:data.images.filter(i=>i.id!==id)});
+
+  return <div>
+    <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:8}}>
+      <Field label="Kolommen">
+        <select value={data.columns} onChange={e=>onChange({...data,columns:+e.target.value})} style={{...S.inp,width:60}}>
+          <option value={2}>2</option><option value={3}>3</option><option value={4}>4</option>
+        </select>
+      </Field>
+    </div>
+    <div style={{display:'grid',gridTemplateColumns:`repeat(${data.columns},1fr)`,gap:6}}>
+      {data.images.map(img => <div key={img.id} style={{position:'relative',aspectRatio:'4/3',borderRadius:8,border:'1px solid #dee2e6',overflow:'hidden',background:'#f0f2f5'}}>
+        <img src={img.url} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}} />
+        <button onClick={()=>removeImage(img.id)} style={{position:'absolute',top:4,right:4,width:20,height:20,background:'rgba(0,0,0,.5)',color:'#fff',border:'none',borderRadius:'50%',fontSize:10,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
+      </div>)}
+      <button onClick={addImage} style={{aspectRatio:'4/3',border:'2px dashed #dee2e6',borderRadius:8,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:4,color:'#6c757d',cursor:'pointer',background:'transparent',fontSize:11,fontFamily:'inherit'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='#2563eb';e.currentTarget.style.color='#2563eb'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='#dee2e6';e.currentTarget.style.color='#6c757d'}}>
+        <span style={{fontSize:18}}>📤</span>Upload
+      </button>
+    </div>
+  </div>;
+}
+
+// ── VIDEO ───────────────────────────────────────────
+
+function VideoEditor({data,onChange}) {
+  return <div>
+    <div style={{background:'#1a1a2e',borderRadius:8,aspectRatio:'16/9',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:32,marginBottom:8}}>▶</div>
+    <Input value={data.url} onChange={v=>onChange({...data,url:v})} placeholder="YouTube of Vimeo URL…" />
+  </div>;
+}
+
+// ── SIGNATURE ───────────────────────────────────────
+
+function SignatureEditor({data,onChange}) {
+  return <div>
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
+      <Field label="Naam ondertekenaar"><Input value={data.signerName} onChange={v=>onChange({...data,signerName:v})} placeholder="Naam klant"/></Field>
+      <Field label="Functie"><Input value={data.signerRole} onChange={v=>onChange({...data,signerRole:v})} placeholder="CEO, CTO, …"/></Field>
+    </div>
+    <div style={{border:'1px solid #dee2e6',borderRadius:8,height:90,background:'#fafbfc',display:'flex',alignItems:'center',justifyContent:'center',color:'#c8ccd0',fontSize:12,cursor:'crosshair'}}>
+      Teken hier uw handtekening
+    </div>
+    <div style={{display:'flex',gap:8,marginTop:8}}>
+      <button style={{padding:'5px 10px',fontSize:11,border:'1px solid #dee2e6',borderRadius:6,background:'#fff',color:'#6c757d',cursor:'pointer',fontFamily:'inherit'}}>Wissen</button>
+      <button style={{padding:'5px 10px',fontSize:11,border:'1px solid #dee2e6',borderRadius:6,background:'#fff',color:'#6c757d',cursor:'pointer',fontFamily:'inherit'}}>🔗 Genereer link voor klant</button>
+    </div>
+  </div>;
+}
+
+// ── Block body router ───────────────────────────────
+
+function BlockBody({block,onChange}) {
+  switch(block.type) {
+    case 'cover': return <CoverEditor data={block.data} onChange={onChange}/>;
+    case 'text': return <TextEditor data={block.data} onChange={onChange}/>;
+    case 'room': return <RoomEditor data={block.data} onChange={onChange}/>;
+    case 'options': return <OptionsEditor data={block.data} onChange={onChange}/>;
+    case 'gallery': return <GalleryEditor data={block.data} onChange={onChange}/>;
+    case 'video': return <VideoEditor data={block.data} onChange={onChange}/>;
+    case 'signature': return <SignatureEditor data={block.data} onChange={onChange}/>;
+    default: return null;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MAIN APP
+   ═══════════════════════════════════════════════════════════════ */
+
+function App() {
+  const [blocks,setBlocks] = useState(DEMO_BLOCKS);
+  const [showMenu,setShowMenu] = useState(false);
+  const dragIdx = useRef(null);
+  const [dragOverIdx,setDragOverIdx] = useState(null);
+
+  // Block CRUD
+  const addBlock = (type) => { setBlocks(b=>[...b,createBlock(type)]); setShowMenu(false); };
+  const updateData = useCallback((id,data) => setBlocks(b=>b.map(bl=>bl.id===id?{...bl,data}:bl)), []);
+  const removeBlock = (id) => setBlocks(b=>b.filter(bl=>bl.id!==id));
+  const toggleCollapse = (id) => setBlocks(b=>b.map(bl=>bl.id===id?{...bl,collapsed:!bl.collapsed}:bl));
+  const moveBlock = (from,to) => setBlocks(b=>{ const n=[...b]; const [item]=n.splice(from,1); n.splice(to,0,item); return n; });
+
+  // Drag
+  const onDragStart = (i) => { dragIdx.current=i; };
+  const onDragOver = (e,i) => { e.preventDefault(); setDragOverIdx(i); };
+  const onDrop = (i) => { if(dragIdx.current!==null&&dragIdx.current!==i) moveBlock(dragIdx.current,i); dragIdx.current=null; setDragOverIdx(null); };
+
+  const totals = calcTotals(blocks);
+
+  return <div style={{minHeight:'100vh',background:'#f0f2f5'}}>
+    {/* ── TOPBAR ─────────────────────────────────────── */}
+    <header style={{position:'sticky',top:0,zIndex:50,background:'#fff',borderBottom:'1px solid #e6e8eb',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
+      <div style={{height:3,background:'#2563eb'}} />
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 16px',height:52,maxWidth:800,margin:'0 auto'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <span style={{fontSize:18,fontWeight:800,color:'#2563eb',letterSpacing:'-.02em'}}>QS</span>
+          <span style={{fontSize:13,fontWeight:500,color:'#adb5bd'}}>QuoteStudio v2</span>
+          <span style={{padding:'3px 10px',borderRadius:20,fontSize:10,fontWeight:700,background:'#fff3ee',color:'#c0392b',border:'1px solid #fadcd0'}}>Concept</span>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:6}}>
+          <Btn label="👁 Preview"/><Btn label="📄 PDF"/><Btn label="🔗 Deel"/>
+          <Btn label="💾 Opslaan" primary/>
+          <div style={{width:32,height:32,background:'#eff6ff',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:'#2563eb',border:'1.5px solid #c5d5f0'}}>SB</div>
+        </div>
+      </div>
+    </header>
+
+    {/* ── PALETTE ────────────────────────────────────── */}
+    <div style={{maxWidth:768,margin:'0 auto',padding:'0 16px'}}>
+      <div style={{display:'flex',gap:6,padding:'10px 0',overflowX:'auto'}}>
+        {BLOCK_TYPES.map(type=>{
+          const m=BLOCK_META[type];
+          return <button key={type} onClick={()=>addBlock(type)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 11px',border:'1.5px dashed #d0d5db',borderRadius:8,background:'#fff',fontSize:11,fontWeight:600,color:'#6c757d',cursor:'pointer',whiteSpace:'nowrap',fontFamily:'inherit',transition:'all .15s'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='#2563eb';e.currentTarget.style.color='#2563eb';e.currentTarget.style.background='#eff6ff';e.currentTarget.style.borderStyle='solid'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='#d0d5db';e.currentTarget.style.color='#6c757d';e.currentTarget.style.background='#fff';e.currentTarget.style.borderStyle='dashed'}}>
+            <span>{m.icon}</span>{m.label}
+          </button>;
+        })}
+      </div>
+    </div>
+
+    {/* ── BLOCKS ─────────────────────────────────────── */}
+    <div style={{maxWidth:768,margin:'0 auto',padding:'0 16px 140px'}}>
+      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+        {blocks.map((block,idx) => {
+          const meta=BLOCK_META[block.type];
+          const isOver = dragOverIdx===idx;
+          return <div key={block.id}
+            draggable
+            onDragStart={()=>onDragStart(idx)}
+            onDragOver={e=>onDragOver(e,idx)}
+            onDrop={()=>onDrop(idx)}
+            onDragEnd={()=>setDragOverIdx(null)}
+            style={{background:'#fff',border:isOver?'1px solid #2563eb':'1px solid #e6e8eb',borderRadius:12,overflow:'hidden',transition:'all .15s',boxShadow:isOver?'0 0 0 2px rgba(37,99,235,.15)':'none'}}
+            onMouseEnter={e=>{if(!isOver){e.currentTarget.style.borderColor='#c8ccd0';e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,.08)'}}}
+            onMouseLeave={e=>{if(!isOver){e.currentTarget.style.borderColor='#e6e8eb';e.currentTarget.style.boxShadow='none'}}}
+          >
+            {/* Header */}
+            <div style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px',background:'#fafbfc',borderBottom:'1px solid #f0f1f3',cursor:'grab',userSelect:'none'}}>
+              <span style={{color:'#c8ccd0',fontSize:14}}>⠿</span>
+              <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.6px',padding:'2px 8px',borderRadius:4,...parseColorCSS(meta.colorCSS)}}>{meta.icon} {meta.label}</span>
+              {block.type==='room'&&!block.collapsed && <span style={{fontSize:12,fontWeight:600,color:'#6c757d',marginLeft:4}}>{block.data.roomName}</span>}
+              <span style={{flex:1}} />
+              <div style={{display:'flex',gap:2}}>
+                {idx>0&&<SmBtn label="▲" onClick={()=>moveBlock(idx,idx-1)}/>}
+                {idx<blocks.length-1&&<SmBtn label="▼" onClick={()=>moveBlock(idx,idx+1)}/>}
+                <SmBtn label={block.collapsed?'▶':'▼'} onClick={()=>toggleCollapse(block.id)}/>
+                <SmBtn label="✕" onClick={()=>removeBlock(block.id)} danger/>
+              </div>
+            </div>
+            {/* Body */}
+            {!block.collapsed && <div style={{padding:14}}>
+              <BlockBody block={block} onChange={(data)=>updateData(block.id,data)} />
+            </div>}
+          </div>;
+        })}
+      </div>
+
+      {/* Add block button */}
+      <div style={{display:'flex',justifyContent:'center',padding:'24px 0'}}>
+        <button onClick={()=>setShowMenu(true)} style={{padding:'10px 20px',border:'2px dashed #d0d5db',borderRadius:12,background:'transparent',fontSize:13,fontWeight:600,color:'#6c757d',cursor:'pointer',fontFamily:'inherit',transition:'all .15s'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='#2563eb';e.currentTarget.style.color='#2563eb';e.currentTarget.style.background='#eff6ff'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='#d0d5db';e.currentTarget.style.color='#6c757d';e.currentTarget.style.background='transparent'}}>
+          + Blok toevoegen
+        </button>
+      </div>
+    </div>
+
+    {/* ── STICKY TOTALS ──────────────────────────────── */}
+    <div style={{position:'fixed',bottom:0,left:0,right:0,background:'#fff',borderTop:'2px solid #eef0f3',boxShadow:'0 -2px 8px rgba(0,0,0,.06)',zIndex:40}}>
+      <div style={{maxWidth:768,margin:'0 auto',padding:'10px 16px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <div style={{fontSize:11,color:'#6c757d',lineHeight:1.7}}>
+          <div style={{display:'flex',justifyContent:'space-between',gap:20}}><span>Subtotaal</span><span>{fmt(totals.subtotal)}</span></div>
+          {totals.optCount>0&&<div style={{display:'flex',justifyContent:'space-between',gap:20}}><span>Opties ({totals.optCount})</span><span>{fmt(totals.optTotal)}</span></div>}
+          <div style={{display:'flex',justifyContent:'space-between',gap:20}}><span>BTW 21%</span><span>{fmt(totals.vat)}</span></div>
+        </div>
+        <div style={{textAlign:'right'}}>
+          <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px',color:'#6c757d'}}>Totaal incl. BTW</div>
+          <div style={{fontSize:22,fontWeight:800,letterSpacing:'-.02em',color:'#212529'}}>{fmt(totals.total)}</div>
+        </div>
+      </div>
+    </div>
+
+    {/* ── BLOCK MENU ─────────────────────────────────── */}
+    {showMenu && <div onClick={()=>setShowMenu(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.3)',zIndex:60,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:12,padding:16,width:'100%',maxWidth:360,boxShadow:'0 8px 40px rgba(0,0,0,.15)'}}>
+        <h3 style={{fontSize:14,fontWeight:700,marginBottom:12}}>Blok toevoegen</h3>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+          {BLOCK_TYPES.map(type=>{
+            const m=BLOCK_META[type];
+            return <button key={type} onClick={()=>addBlock(type)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',border:'1px solid #e6e8eb',borderRadius:8,cursor:'pointer',background:'#fff',textAlign:'left',fontFamily:'inherit',transition:'all .15s'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='#2563eb';e.currentTarget.style.background='#eff6ff'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='#e6e8eb';e.currentTarget.style.background='#fff'}}>
+              <div style={{width:32,height:32,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,...parseColorCSS(meta.colorCSS)}}>{m.icon}</div>
+              <span style={{fontSize:12,fontWeight:600}}>{m.label}</span>
+            </button>;
+          })}
+        </div>
+        <button onClick={()=>setShowMenu(false)} style={{width:'100%',marginTop:12,padding:'8px 0',fontSize:12,fontWeight:600,color:'#6c757d',border:'1px solid #e6e8eb',borderRadius:8,background:'#fff',cursor:'pointer',fontFamily:'inherit'}}>Annuleren</button>
+      </div>
+    </div>}
+  </div>;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SMALL COMPONENTS
+   ═══════════════════════════════════════════════════════════════ */
+
+function Btn({label,primary,onClick}) {
+  return <button onClick={onClick} style={{padding:'6px 12px',fontSize:12,fontWeight:600,background:primary?'#2563eb':'#f6f7f9',color:primary?'#fff':'#33373d',border:primary?'1px solid #1d4ed8':'1px solid #e6e8eb',borderRadius:8,cursor:'pointer',fontFamily:'inherit'}}>{label}</button>;
+}
+
+function SmBtn({label,onClick,danger}) {
+  return <button onClick={onClick} style={{background:'none',border:'none',color:'#bfc4ca',fontSize:13,cursor:'pointer',padding:'2px 5px',borderRadius:4,fontFamily:'inherit',lineHeight:1}} onMouseEnter={e=>{e.target.style.color=danger?'#dc3545':'#212529';e.target.style.background=danger?'#fdf0f0':'#eef0f3'}} onMouseLeave={e=>{e.target.style.color='#bfc4ca';e.target.style.background='none'}}>{label}</button>;
+}
+
+function parseColorCSS(css) {
+  const parts = css.split(';').map(s=>s.trim()).filter(Boolean);
+  const obj = {};
+  for (const p of parts) {
+    const [k,v] = p.split(':').map(s=>s.trim());
+    obj[k]=v;
+  }
+  return obj;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MOUNT
+   ═══════════════════════════════════════════════════════════════ */
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
